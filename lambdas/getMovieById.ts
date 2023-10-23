@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand,QueryCommand,QueryCommandInput } from "@aws-sdk/lib-dynamodb";
 
 const ddbDocClient = createDDbDocClient();
 
@@ -12,7 +12,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => { // 
     // const movieId = parameters ? parseInt(parameters.movieId) : undefined;
     const parameters  = event?.pathParameters;
     const movieId = parameters?.movieId ? parseInt(parameters.movieId) : undefined;
-
+    // if ?cast=true is passed in, return the cast members
+    const cast = event?.queryStringParameters?.cast === "true";
+    
     if (!movieId) {
       return {
         statusCode: 404,
@@ -38,10 +40,34 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => { // 
         },
         body: JSON.stringify({ Message: "Invalid movie Id" }),
       };
+
+      
     }
-    const body = {
-      data: commandOutput.Item,
+
+    let body = {
+      data: commandOutput.Item
     };
+
+
+    // if ?cast=true is passed in, return the cast members
+    if (cast) {
+      let castInput: QueryCommandInput = {
+        TableName: "MovieCast",
+        KeyConditionExpression: "movieId = :m",
+        ExpressionAttributeValues: {
+          ":m": movieId
+        }
+      };
+      const castOutput = await ddbDocClient.send(
+        new QueryCommand(castInput)
+      );
+
+      //body = { ...body, cast: commandOutput };
+      body.data.castMembers = castOutput.Items;
+
+    }
+
+
 
     // Return Response
     return {
